@@ -9,10 +9,6 @@
 #![doc(html_root_url = "https://docs.rs/orderbook-core")]
 
 /// Returns the crate version as declared in Cargo.toml.
-///
-/// This exists mostly as a canary for the CI pipeline in phase one, so we
-/// have at least one real function with a real test before any domain
-/// logic exists.
 #[must_use]
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
