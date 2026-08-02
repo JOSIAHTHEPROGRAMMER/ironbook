@@ -1,0 +1,20 @@
+[package]
+name = "orderbook-cli"
+description = "Command line interface for the ironbook matching engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "ironbook"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+orderbook-core = { path = "../orderbook-core" }
+clap = { version = "4", features = ["derive"] }

@@ -1,0 +1,16 @@
+[package]
+name = "orderbook-core"
+description = "Core domain types, order book, and matching engine for ironbook"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+
+[dev-dependencies]

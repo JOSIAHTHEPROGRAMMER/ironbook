@@ -1,0 +1,13 @@
+/target
+
+/target/criterion
+
+# coverage output
+*.profraw
+lcov.info
+codecov.json
+
+# editor and OS noise
+.vscode/
+.idea/
+.DS_Store

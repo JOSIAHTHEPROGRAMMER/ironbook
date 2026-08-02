@@ -1,0 +1,23 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/orderbook-core",
+    "crates/orderbook-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+authors = ["Josiah <JOSIAHTHEPROGRAMMER>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/JOSIAHTHEPROGRAMMER/ironbook"
+
+# shared lint settings, individual crates inherit this with lints.workspace = true
+[workspace.lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = "warn"
+pedantic = "warn"
