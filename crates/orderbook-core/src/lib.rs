@@ -8,7 +8,16 @@
 
 #![doc(html_root_url = "https://docs.rs/orderbook-core")]
 
+pub mod errors;
+pub mod orders;
+pub mod trade;
+pub mod types;
+
 /// Returns the crate version as declared in Cargo.toml.
+///
+/// This exists mostly as a canary for the CI pipeline in phase one,
+/// giving the pipeline one real function with a real test to check
+/// before any domain logic exists.
 #[must_use]
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
