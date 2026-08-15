@@ -76,6 +76,51 @@ pub enum OrderBookError {
 /// Convenience alias for results produced by order book operations.
 pub type OrderBookResult<T> = Result<T, OrderBookError>;
 
+/// Reasons the matching engine rejects an incoming order.
+///
+/// Wraps `OrderError` and `OrderBookError` rather than redeclaring
+/// their variants, an order can be rejected either because the order
+/// itself is invalid or because its client order id collides with a
+/// resting order, both are already fully described by the layers below,
+/// this type just lets the engine return one error type to its caller.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[non_exhaustive]
+pub enum MatchingError {
+    /// The order failed validation at construction time.
+    #[error(transparent)]
+    InvalidOrder(#[from] OrderError),
+
+    /// The order could not be placed on the book.
+    #[error(transparent)]
+    OrderBook(#[from] OrderBookError),
+}
+
+/// Convenience alias for results produced by the matching engine.
+pub type MatchingResult<T> = Result<T, MatchingError>;
+
+#[cfg(test)]
+mod matching_error_tests {
+    use super::*;
+
+    #[test]
+    fn invalid_order_wraps_the_underlying_message() {
+        let error: MatchingError = OrderError::ZeroQuantity.into();
+        assert_eq!(
+            error.to_string(),
+            "order quantity must be greater than zero"
+        );
+    }
+
+    #[test]
+    fn order_book_wraps_the_underlying_message() {
+        let error: MatchingError = OrderBookError::MarketOrderCannotRest.into();
+        assert_eq!(
+            error.to_string(),
+            "market orders cannot be inserted into the book"
+        );
+    }
+}
+
 #[cfg(test)]
 mod order_book_error_tests {
     use super::*;

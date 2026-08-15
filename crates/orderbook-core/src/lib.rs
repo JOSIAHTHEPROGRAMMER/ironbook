@@ -9,6 +9,7 @@
 #![doc(html_root_url = "https://docs.rs/orderbook-core")]
 
 pub mod errors;
+pub mod matching;
 pub mod orderbook;
 pub mod orders;
 pub mod trade;

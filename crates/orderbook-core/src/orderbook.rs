@@ -116,6 +116,26 @@ impl OrderBook {
         self.orders.get(&order_id)
     }
 
+    /// Returns a mutable reference to a resting order by id.
+    ///
+    /// Used by the matching engine to apply a fill directly to a maker
+    /// order still resting on the book, without removing and
+    /// reinserting it.
+    pub fn get_mut(&mut self, order_id: OrderId) -> Option<&mut Order> {
+        self.orders.get_mut(&order_id)
+    }
+
+    /// Returns true if a resting order already uses this client order id.
+    ///
+    /// Exposed so the matching engine can reject a duplicate before
+    /// matching starts, checking only at insertion time would be too
+    /// late, by then trades may have already executed against other
+    /// orders and cannot be undone.
+    #[must_use]
+    pub fn contains_client_order_id(&self, client_order_id: ClientOrderId) -> bool {
+        self.client_order_ids.contains(&client_order_id)
+    }
+
     /// Returns the best price on the given side, the highest bid or the
     /// lowest ask.
     #[must_use]
@@ -292,5 +312,30 @@ mod tests {
         book.insert(limit_order(1, 1, Side::Buy, 100)).unwrap();
         book.insert(limit_order(2, 2, Side::Sell, 101)).unwrap();
         assert_eq!(book.order_count(), 2);
+    }
+
+    #[test]
+    fn get_mut_allows_applying_a_fill_in_place() {
+        let mut book = OrderBook::new();
+        book.insert(limit_order(1, 1, Side::Buy, 100)).unwrap();
+
+        let order = book.get_mut(OrderId::from_sequence(1)).unwrap();
+        order.fill(Quantity::from_units(4));
+
+        let order = book.get(OrderId::from_sequence(1)).unwrap();
+        assert_eq!(order.remaining_quantity(), Quantity::from_units(6));
+    }
+
+    #[test]
+    fn contains_client_order_id_reflects_resting_orders() {
+        let mut book = OrderBook::new();
+        let client_id = ClientOrderId::from_raw(1);
+        assert!(!book.contains_client_order_id(client_id));
+
+        book.insert(limit_order(1, 1, Side::Buy, 100)).unwrap();
+        assert!(book.contains_client_order_id(client_id));
+
+        book.cancel(OrderId::from_sequence(1)).unwrap();
+        assert!(!book.contains_client_order_id(client_id));
     }
 }
