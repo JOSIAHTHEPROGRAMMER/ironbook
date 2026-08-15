@@ -9,7 +9,6 @@
 #![doc(html_root_url = "https://docs.rs/orderbook-core")]
 
 pub mod errors;
-pub mod orderbook;
 pub mod orders;
 pub mod trade;
 pub mod types;

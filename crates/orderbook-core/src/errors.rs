@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 
-use crate::types::{ClientOrderId, OrderId, Price};
+use crate::types::Price;
 
 /// Reasons an order fails validation at construction time.
 ///
@@ -45,62 +45,6 @@ impl OrderError {
 
 /// Convenience alias for results produced while validating orders.
 pub type OrderResult<T> = Result<T, OrderError>;
-
-/// Reasons an operation on the order book fails.
-///
-/// Marked non exhaustive for the same reason as `OrderError`, future
-/// order types will likely add rejection cases specific to resting
-/// orders, an iceberg order revealing its next slice, for example.
-#[derive(Debug, Clone, PartialEq, Eq, Error)]
-#[non_exhaustive]
-pub enum OrderBookError {
-    /// The client order id is already resting on the book.
-    #[error("client order id {0:?} is already resting on the book")]
-    DuplicateClientOrderId(ClientOrderId),
-
-    /// The order id does not exist on the book.
-    #[error("no resting order found with id {0:?}")]
-    UnknownOrder(OrderId),
-
-    /// A market order was passed to an operation that only accepts
-    /// resting orders.
-    ///
-    /// Market orders match immediately against the book and never rest
-    /// on it, inserting one here would leave it stuck as a phantom
-    /// limit order with no price, which the matching engine could never
-    /// clean up correctly.
-    #[error("market orders cannot be inserted into the book")]
-    MarketOrderCannotRest,
-}
-
-/// Convenience alias for results produced by order book operations.
-pub type OrderBookResult<T> = Result<T, OrderBookError>;
-
-#[cfg(test)]
-mod order_book_error_tests {
-    use super::*;
-
-    #[test]
-    fn duplicate_client_order_id_message_includes_the_id() {
-        let error = OrderBookError::DuplicateClientOrderId(ClientOrderId::from_raw(7));
-        assert!(error.to_string().contains('7'));
-    }
-
-    #[test]
-    fn unknown_order_message_includes_the_id() {
-        let error = OrderBookError::UnknownOrder(OrderId::from_sequence(42));
-        assert!(error.to_string().contains("42"));
-    }
-
-    #[test]
-    fn market_order_cannot_rest_has_a_fixed_message() {
-        let error = OrderBookError::MarketOrderCannotRest;
-        assert_eq!(
-            error.to_string(),
-            "market orders cannot be inserted into the book"
-        );
-    }
-}
 
 #[cfg(test)]
 mod tests {
