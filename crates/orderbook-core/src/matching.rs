@@ -175,6 +175,52 @@ impl MatchingEngine {
         })
     }
 
+    /// Cancels a resting order and returns it.
+    ///
+    /// # Errors
+    ///
+    /// Returns `MatchingError::OrderBook` wrapping
+    /// `OrderBookError::UnknownOrder` if no resting order has this id.
+    pub fn cancel_order(&mut self, order_id: OrderId) -> MatchingResult<Order> {
+        Ok(self.book.cancel(order_id)?)
+    }
+
+    /// Replaces a resting limit order's price and quantity.
+    ///
+    /// Implemented as validate, then cancel, then resubmit. The new
+    /// price and quantity are checked before the existing order is
+    /// touched, so a rejected modify never destroys the order it was
+    /// trying to replace. The replacement receives a new engine
+    /// assigned id and goes to the back of its price level's queue, it
+    /// loses time priority exactly as it would on a real exchange, only
+    /// the caller's client order id carries over. If the new price
+    /// crosses the book, the replacement can produce trades
+    /// immediately, the same as any other submitted order.
+    ///
+    /// # Errors
+    ///
+    /// Returns `MatchingError::InvalidOrder` if `new_price` or
+    /// `new_quantity` fail validation, before anything on the book is
+    /// touched. Returns `MatchingError::OrderBook` wrapping
+    /// `OrderBookError::UnknownOrder` if no resting order has `order_id`.
+    pub fn modify_order(
+        &mut self,
+        order_id: OrderId,
+        new_price: Price,
+        new_quantity: Quantity,
+    ) -> MatchingResult<ExecutionReport> {
+        Order::validate_limit_inputs(new_price, new_quantity)?;
+
+        let existing = self.book.cancel(order_id)?;
+
+        self.submit_limit_order(
+            existing.client_order_id(),
+            existing.side(),
+            new_price,
+            new_quantity,
+        )
+    }
+
     fn ensure_client_order_id_available(
         &self,
         client_order_id: ClientOrderId,
@@ -595,6 +641,166 @@ mod tests {
         );
 
         assert!(matches!(result, Err(MatchingError::InvalidOrder(_))));
+    }
+
+    #[test]
+    fn cancel_order_removes_a_resting_order() {
+        let mut engine = engine();
+        engine
+            .submit_limit_order(
+                ClientOrderId::from_raw(1),
+                Side::Buy,
+                Price::from_ticks(100),
+                Quantity::from_units(5),
+            )
+            .unwrap();
+
+        let cancelled = engine.cancel_order(OrderId::from_sequence(1)).unwrap();
+        assert_eq!(cancelled.id(), OrderId::from_sequence(1));
+        assert!(engine.book().is_empty());
+    }
+
+    #[test]
+    fn cancel_order_unknown_id_returns_error() {
+        let mut engine = engine();
+        let result = engine.cancel_order(OrderId::from_sequence(99));
+        assert!(matches!(result, Err(MatchingError::OrderBook(_))));
+    }
+
+    #[test]
+    fn modify_order_replaces_price_and_quantity() {
+        let mut engine = engine();
+        engine
+            .submit_limit_order(
+                ClientOrderId::from_raw(1),
+                Side::Buy,
+                Price::from_ticks(100),
+                Quantity::from_units(5),
+            )
+            .unwrap();
+
+        let report = engine
+            .modify_order(
+                OrderId::from_sequence(1),
+                Price::from_ticks(105),
+                Quantity::from_units(8),
+            )
+            .unwrap();
+
+        assert_eq!(
+            engine.book().best_price(Side::Buy),
+            Some(Price::from_ticks(105))
+        );
+        assert_eq!(report.remaining_quantity(), Quantity::from_units(8));
+        assert!(report.resting());
+    }
+
+    #[test]
+    fn modify_order_gets_a_new_id_and_loses_time_priority() {
+        let mut engine = engine();
+        engine
+            .submit_limit_order(
+                ClientOrderId::from_raw(1),
+                Side::Buy,
+                Price::from_ticks(100),
+                Quantity::from_units(5),
+            )
+            .unwrap();
+        engine
+            .submit_limit_order(
+                ClientOrderId::from_raw(2),
+                Side::Buy,
+                Price::from_ticks(100),
+                Quantity::from_units(5),
+            )
+            .unwrap();
+
+        let report = engine
+            .modify_order(
+                OrderId::from_sequence(1),
+                Price::from_ticks(100),
+                Quantity::from_units(5),
+            )
+            .unwrap();
+
+        assert_ne!(report.order_id(), OrderId::from_sequence(1));
+
+        let level: Vec<OrderId> = engine
+            .book()
+            .price_level(Side::Buy, Price::from_ticks(100))
+            .unwrap()
+            .iter()
+            .copied()
+            .collect();
+        assert_eq!(level, vec![OrderId::from_sequence(2), report.order_id()]);
+    }
+
+    #[test]
+    fn modify_order_can_immediately_cross_and_produce_trades() {
+        let mut engine = engine();
+        engine
+            .submit_limit_order(
+                ClientOrderId::from_raw(1),
+                Side::Sell,
+                Price::from_ticks(100),
+                Quantity::from_units(5),
+            )
+            .unwrap();
+        engine
+            .submit_limit_order(
+                ClientOrderId::from_raw(2),
+                Side::Buy,
+                Price::from_ticks(90),
+                Quantity::from_units(5),
+            )
+            .unwrap();
+
+        let report = engine
+            .modify_order(
+                OrderId::from_sequence(2),
+                Price::from_ticks(100),
+                Quantity::from_units(5),
+            )
+            .unwrap();
+
+        assert_eq!(report.trades().len(), 1);
+        assert!(!report.resting());
+    }
+
+    #[test]
+    fn modify_order_unknown_id_returns_error() {
+        let mut engine = engine();
+        let result = engine.modify_order(
+            OrderId::from_sequence(99),
+            Price::from_ticks(100),
+            Quantity::from_units(5),
+        );
+        assert!(matches!(result, Err(MatchingError::OrderBook(_))));
+    }
+
+    #[test]
+    fn modify_order_rejects_invalid_replacement_without_destroying_the_original() {
+        let mut engine = engine();
+        engine
+            .submit_limit_order(
+                ClientOrderId::from_raw(1),
+                Side::Buy,
+                Price::from_ticks(100),
+                Quantity::from_units(5),
+            )
+            .unwrap();
+
+        let result = engine.modify_order(
+            OrderId::from_sequence(1),
+            Price::from_ticks(100),
+            Quantity::from_units(0),
+        );
+
+        assert!(matches!(result, Err(MatchingError::InvalidOrder(_))));
+
+        let original = engine.book().get(OrderId::from_sequence(1)).unwrap();
+        assert_eq!(original.remaining_quantity(), Quantity::from_units(5));
+        assert_eq!(original.price(), Some(Price::from_ticks(100)));
     }
 
     #[test]

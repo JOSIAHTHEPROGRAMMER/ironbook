@@ -39,6 +39,23 @@ pub struct Order {
 }
 
 impl Order {
+    /// Checks that a price and quantity are valid for a limit order.
+    ///
+    /// Pulled out of `new_limit` so the matching engine's `modify_order`
+    /// can run the same check before touching the book, a rejected
+    /// modify must never cancel the existing order first and discover
+    /// the replacement is invalid only afterward, by then there would
+    /// be nothing left to roll back to.
+    pub(crate) fn validate_limit_inputs(price: Price, quantity: Quantity) -> OrderResult<()> {
+        if !quantity.is_positive() {
+            return Err(OrderError::ZeroQuantity);
+        }
+        if !price.is_valid_limit_price() {
+            return Err(OrderError::non_positive_limit_price(price));
+        }
+        Ok(())
+    }
+
     /// Builds a limit order, rejecting a non positive price or zero quantity.
     ///
     /// # Errors
@@ -53,12 +70,7 @@ impl Order {
         price: Price,
         quantity: Quantity,
     ) -> OrderResult<Self> {
-        if !quantity.is_positive() {
-            return Err(OrderError::ZeroQuantity);
-        }
-        if !price.is_valid_limit_price() {
-            return Err(OrderError::non_positive_limit_price(price));
-        }
+        Self::validate_limit_inputs(price, quantity)?;
 
         Ok(Self {
             id,
@@ -189,6 +201,27 @@ mod tests {
 
     fn sample_ids() -> (OrderId, ClientOrderId) {
         (OrderId::from_sequence(1), ClientOrderId::from_raw(100))
+    }
+
+    #[test]
+    fn validate_limit_inputs_rejects_zero_quantity() {
+        let result = Order::validate_limit_inputs(Price::from_ticks(100), Quantity::from_units(0));
+        assert_eq!(result.unwrap_err(), OrderError::ZeroQuantity);
+    }
+
+    #[test]
+    fn validate_limit_inputs_rejects_non_positive_price() {
+        let result = Order::validate_limit_inputs(Price::from_ticks(0), Quantity::from_units(10));
+        assert_eq!(
+            result.unwrap_err(),
+            OrderError::non_positive_limit_price(Price::from_ticks(0))
+        );
+    }
+
+    #[test]
+    fn validate_limit_inputs_accepts_valid_input() {
+        let result = Order::validate_limit_inputs(Price::from_ticks(100), Quantity::from_units(10));
+        assert!(result.is_ok());
     }
 
     #[test]
