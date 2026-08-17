@@ -35,17 +35,17 @@ cargo run --bin ironbook
 
 ## Roadmap
 
-| Phase | Scope | Status |
-|---|---|---|
-| 1 | Repository setup, CI, CLI skeleton | In progress |
-| 2 | Domain models | Not started |
-| 3 | Order book | Not started |
-| 4 | Matching engine | Not started |
-| 5 | Order management | Not started |
-| 6 | CLI | Not started |
-| 7 | Metrics and benchmarks | Not started |
-| 8 | Optimization | Not started |
-| 9 | Documentation | Not started |
+| Phase | Scope                              | Status      |
+| ----- | ---------------------------------- | ----------- |
+| 1     | Repository setup, CI, CLI skeleton | In progress |
+| 2     | Domain models                      | Not started |
+| 3     | Order book                         | Not started |
+| 4     | Matching engine                    | Not started |
+| 5     | Order management                   | Not started |
+| 6     | CLI                                | Not started |
+| 7     | Metrics and benchmarks             | Not started |
+| 8     | Optimization                       | Not started |
+| 9     | Documentation                      | Not started |
 
 ## Contributing
 

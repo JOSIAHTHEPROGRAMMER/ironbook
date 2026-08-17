@@ -153,6 +153,31 @@ impl OrderBook {
         self.book_for(side).get(&price)
     }
 
+    /// Returns every resting order, in no particular order.
+    ///
+    /// For listing all resting orders regardless of price or side.
+    /// Callers that care about price time priority should use
+    /// `price_level` instead, this makes no ordering guarantee.
+    pub fn orders(&self) -> impl Iterator<Item = &Order> {
+        self.orders.values()
+    }
+
+    /// Returns every price level on a side, in ascending price order,
+    /// each with the order ids resting there in arrival order.
+    ///
+    /// Ascending is how the underlying map iterates naturally. For the
+    /// bid side the best price is the last entry, not the first,
+    /// callers that want best price first should reverse the iterator.
+    #[must_use]
+    pub fn price_levels(
+        &self,
+        side: Side,
+    ) -> impl DoubleEndedIterator<Item = (Price, &VecDeque<OrderId>)> {
+        self.book_for(side)
+            .iter()
+            .map(|(&price, orders)| (price, orders))
+    }
+
     /// Returns true if no orders are resting on the book.
     #[must_use]
     pub fn is_empty(&self) -> bool {
@@ -312,6 +337,58 @@ mod tests {
         book.insert(limit_order(1, 1, Side::Buy, 100)).unwrap();
         book.insert(limit_order(2, 2, Side::Sell, 101)).unwrap();
         assert_eq!(book.order_count(), 2);
+    }
+
+    #[test]
+    fn orders_iterates_every_resting_order_regardless_of_side() {
+        let mut book = OrderBook::new();
+        book.insert(limit_order(1, 1, Side::Buy, 100)).unwrap();
+        book.insert(limit_order(2, 2, Side::Sell, 101)).unwrap();
+
+        let mut ids: Vec<OrderId> = book.orders().map(Order::id).collect();
+        ids.sort();
+        assert_eq!(
+            ids,
+            vec![OrderId::from_sequence(1), OrderId::from_sequence(2)]
+        );
+    }
+
+    #[test]
+    fn price_levels_iterates_in_ascending_price_order() {
+        let mut book = OrderBook::new();
+        book.insert(limit_order(1, 1, Side::Buy, 100)).unwrap();
+        book.insert(limit_order(2, 2, Side::Buy, 90)).unwrap();
+        book.insert(limit_order(3, 3, Side::Buy, 110)).unwrap();
+
+        let prices: Vec<Price> = book
+            .price_levels(Side::Buy)
+            .map(|(price, _)| price)
+            .collect();
+        assert_eq!(
+            prices,
+            vec![
+                Price::from_ticks(90),
+                Price::from_ticks(100),
+                Price::from_ticks(110)
+            ]
+        );
+    }
+
+    #[test]
+    fn price_levels_can_be_reversed_for_best_price_first() {
+        let mut book = OrderBook::new();
+        book.insert(limit_order(1, 1, Side::Buy, 100)).unwrap();
+        book.insert(limit_order(2, 2, Side::Buy, 110)).unwrap();
+
+        let best_first: Vec<Price> = book
+            .price_levels(Side::Buy)
+            .rev()
+            .map(|(price, _)| price)
+            .collect();
+        assert_eq!(
+            best_first,
+            vec![Price::from_ticks(110), Price::from_ticks(100)]
+        );
     }
 
     #[test]
