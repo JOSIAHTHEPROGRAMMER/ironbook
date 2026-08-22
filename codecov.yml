@@ -1,0 +1,18 @@
+coverage:
+    status:
+        project:
+            default:
+                target: auto
+                threshold: 1%
+        patch:
+            default:
+                target: auto
+                threshold: 1%
+
+ignore:
+    # main.rs is the binary entry point, one line calling repl::run().
+    # Nothing in a test suite ever calls main() directly, that is not how
+    # Rust testing works, so this file will always show as 0% covered
+    # regardless of how well tested the actual logic is. Excluding it so
+    # the percentage reflects real code, not an entry point artifact.
+    - "crates/orderbook-cli/src/main.rs"
