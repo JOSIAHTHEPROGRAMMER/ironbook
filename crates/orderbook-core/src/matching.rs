@@ -2,8 +2,10 @@
 //! single symbol's order book.
 
 use std::cmp::min;
+use std::time::Instant;
 
 use crate::errors::{MatchingError, MatchingResult, OrderBookError};
+use crate::metrics::Metrics;
 use crate::orderbook::OrderBook;
 use crate::orders::Order;
 use crate::trade::Trade;
@@ -59,6 +61,7 @@ pub struct MatchingEngine {
     trade_history: Vec<Trade>,
     next_order_sequence: u64,
     next_trade_sequence: u64,
+    metrics: Metrics,
 }
 
 impl MatchingEngine {
@@ -71,6 +74,7 @@ impl MatchingEngine {
             trade_history: Vec::new(),
             next_order_sequence: 1,
             next_trade_sequence: 1,
+            metrics: Metrics::new(),
         }
     }
 
@@ -92,6 +96,13 @@ impl MatchingEngine {
         &self.trade_history
     }
 
+    /// Returns the activity counters and latency histograms recorded
+    /// so far.
+    #[must_use]
+    pub const fn metrics(&self) -> &Metrics {
+        &self.metrics
+    }
+
     /// Submits a limit order, matching it against the book immediately
     /// and resting whatever remains unfilled.
     ///
@@ -107,25 +118,45 @@ impl MatchingEngine {
         price: Price,
         quantity: Quantity,
     ) -> MatchingResult<ExecutionReport> {
-        self.ensure_client_order_id_available(client_order_id)?;
+        let submit_started_at = Instant::now();
+
+        if let Err(error) = self.ensure_client_order_id_available(client_order_id) {
+            self.metrics.record_order_rejected();
+            return Err(error);
+        }
 
         let order_id = self.next_order_id();
-        let mut order = Order::new_limit(
+        let mut order = match Order::new_limit(
             order_id,
             client_order_id,
             self.symbol.clone(),
             side,
             price,
             quantity,
-        )?;
+        ) {
+            Ok(order) => order,
+            Err(error) => {
+                self.metrics.record_order_rejected();
+                return Err(error.into());
+            }
+        };
 
+        let match_started_at = Instant::now();
         let trades = self.match_order(&mut order);
+        self.metrics
+            .record_match_latency(match_started_at.elapsed());
+
         let remaining_quantity = order.remaining_quantity();
         let resting = !order.is_fully_filled();
 
         if resting {
             self.book.insert(order)?;
         }
+
+        self.metrics.record_order_submitted();
+        self.metrics.record_trades(trades.len());
+        self.metrics
+            .record_submit_latency(submit_started_at.elapsed());
 
         Ok(ExecutionReport {
             order_id,
@@ -153,19 +184,39 @@ impl MatchingEngine {
         side: Side,
         quantity: Quantity,
     ) -> MatchingResult<ExecutionReport> {
-        self.ensure_client_order_id_available(client_order_id)?;
+        let submit_started_at = Instant::now();
+
+        if let Err(error) = self.ensure_client_order_id_available(client_order_id) {
+            self.metrics.record_order_rejected();
+            return Err(error);
+        }
 
         let order_id = self.next_order_id();
-        let mut order = Order::new_market(
+        let mut order = match Order::new_market(
             order_id,
             client_order_id,
             self.symbol.clone(),
             side,
             quantity,
-        )?;
+        ) {
+            Ok(order) => order,
+            Err(error) => {
+                self.metrics.record_order_rejected();
+                return Err(error.into());
+            }
+        };
 
+        let match_started_at = Instant::now();
         let trades = self.match_order(&mut order);
+        self.metrics
+            .record_match_latency(match_started_at.elapsed());
+
         let remaining_quantity = order.remaining_quantity();
+
+        self.metrics.record_order_submitted();
+        self.metrics.record_trades(trades.len());
+        self.metrics
+            .record_submit_latency(submit_started_at.elapsed());
 
         Ok(ExecutionReport {
             order_id,
@@ -182,7 +233,9 @@ impl MatchingEngine {
     /// Returns `MatchingError::OrderBook` wrapping
     /// `OrderBookError::UnknownOrder` if no resting order has this id.
     pub fn cancel_order(&mut self, order_id: OrderId) -> MatchingResult<Order> {
-        Ok(self.book.cancel(order_id)?)
+        let cancelled = self.book.cancel(order_id)?;
+        self.metrics.record_order_cancelled();
+        Ok(cancelled)
     }
 
     /// Replaces a resting limit order's price and quantity.
@@ -196,6 +249,11 @@ impl MatchingEngine {
     /// the caller's client order id carries over. If the new price
     /// crosses the book, the replacement can produce trades
     /// immediately, the same as any other submitted order.
+    ///
+    /// Records no metrics of its own. The `cancel_order` and
+    /// `submit_limit_order` calls this delegates to already record the
+    /// cancellation and the resubmission, recording them again here
+    /// would count the same activity twice.
     ///
     /// # Errors
     ///
@@ -211,7 +269,7 @@ impl MatchingEngine {
     ) -> MatchingResult<ExecutionReport> {
         Order::validate_limit_inputs(new_price, new_quantity)?;
 
-        let existing = self.book.cancel(order_id)?;
+        let existing = self.cancel_order(order_id)?;
 
         self.submit_limit_order(
             existing.client_order_id(),
@@ -839,5 +897,126 @@ mod tests {
             Price::from_ticks(101),
             Price::from_ticks(100)
         ));
+    }
+
+    #[test]
+    fn successful_submit_records_order_submitted_and_trade_counts() {
+        let mut engine = engine();
+        engine
+            .submit_limit_order(
+                ClientOrderId::from_raw(1),
+                Side::Sell,
+                Price::from_ticks(100),
+                Quantity::from_units(5),
+            )
+            .unwrap();
+        engine
+            .submit_limit_order(
+                ClientOrderId::from_raw(2),
+                Side::Buy,
+                Price::from_ticks(100),
+                Quantity::from_units(5),
+            )
+            .unwrap();
+
+        assert_eq!(engine.metrics().orders_submitted(), 2);
+        assert_eq!(engine.metrics().trades_executed(), 1);
+        assert_eq!(engine.metrics().orders_rejected(), 0);
+    }
+
+    #[test]
+    fn rejected_submit_records_a_rejection_not_a_submission() {
+        let mut engine = engine();
+        engine
+            .submit_limit_order(
+                ClientOrderId::from_raw(1),
+                Side::Buy,
+                Price::from_ticks(100),
+                Quantity::from_units(5),
+            )
+            .unwrap();
+
+        let _ = engine.submit_limit_order(
+            ClientOrderId::from_raw(1),
+            Side::Sell,
+            Price::from_ticks(100),
+            Quantity::from_units(5),
+        );
+
+        assert_eq!(engine.metrics().orders_submitted(), 1);
+        assert_eq!(engine.metrics().orders_rejected(), 1);
+    }
+
+    #[test]
+    fn invalid_order_input_records_a_rejection() {
+        let mut engine = engine();
+        let _ = engine.submit_limit_order(
+            ClientOrderId::from_raw(1),
+            Side::Buy,
+            Price::from_ticks(0),
+            Quantity::from_units(5),
+        );
+
+        assert_eq!(engine.metrics().orders_rejected(), 1);
+        assert_eq!(engine.metrics().orders_submitted(), 0);
+    }
+
+    #[test]
+    fn cancel_records_a_cancellation_only_on_success() {
+        let mut engine = engine();
+        engine
+            .submit_limit_order(
+                ClientOrderId::from_raw(1),
+                Side::Buy,
+                Price::from_ticks(100),
+                Quantity::from_units(5),
+            )
+            .unwrap();
+
+        let _ = engine.cancel_order(OrderId::from_sequence(99));
+        assert_eq!(engine.metrics().orders_cancelled(), 0);
+
+        engine.cancel_order(OrderId::from_sequence(1)).unwrap();
+        assert_eq!(engine.metrics().orders_cancelled(), 1);
+    }
+
+    #[test]
+    fn modify_records_exactly_one_cancel_and_one_submit() {
+        let mut engine = engine();
+        engine
+            .submit_limit_order(
+                ClientOrderId::from_raw(1),
+                Side::Buy,
+                Price::from_ticks(100),
+                Quantity::from_units(5),
+            )
+            .unwrap();
+
+        engine
+            .modify_order(
+                OrderId::from_sequence(1),
+                Price::from_ticks(105),
+                Quantity::from_units(8),
+            )
+            .unwrap();
+
+        assert_eq!(engine.metrics().orders_submitted(), 2);
+        assert_eq!(engine.metrics().orders_cancelled(), 1);
+    }
+
+    #[test]
+    fn submit_and_match_latency_histograms_receive_samples() {
+        let mut engine = engine();
+        engine
+            .submit_limit_order(
+                ClientOrderId::from_raw(1),
+                Side::Buy,
+                Price::from_ticks(100),
+                Quantity::from_units(5),
+            )
+            .unwrap();
+
+        assert_eq!(engine.metrics().submit_latency().count(), 1);
+        assert_eq!(engine.metrics().match_latency().count(), 1);
     }
 }

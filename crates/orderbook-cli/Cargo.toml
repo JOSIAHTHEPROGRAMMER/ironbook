@@ -18,3 +18,4 @@ workspace = true
 [dependencies]
 orderbook-core = { path = "../orderbook-core" }
 clap = { version = "4", features = ["derive"] }
+rand = { version = "0.10.2", features = ["std_rng"] }

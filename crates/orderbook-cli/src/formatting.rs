@@ -1,9 +1,13 @@
 //! Converts between human typed decimal prices and the integer tick
-//! representation `orderbook-core` uses internally.
+//! representation `orderbook-core` uses internally, and formats other
+//! values that need a display specific presentation, like latency.
 //!
 //! This intentionally lives in the CLI crate, not `orderbook-core`.
-//! The core library has no opinion on tick size or decimal display,
-//! that is a presentation concern, this module is where it belongs.
+//! The core library has no opinion on tick size, decimal display, or
+//! how a duration should be printed, those are presentation concerns,
+//! this module is where they belong.
+
+use std::time::Duration;
 
 use orderbook_core::types::Price;
 
@@ -67,6 +71,26 @@ pub fn format_price(price: Price) -> String {
     format!("{sign}{whole}.{fractional:02}")
 }
 
+/// Formats a duration as a short human readable string, choosing
+/// nanoseconds, microseconds, or milliseconds based on magnitude.
+///
+/// Matching engine latencies span several orders of magnitude within
+/// the same report, a submit call might be single digit microseconds
+/// while a slow outlier is several milliseconds. A fixed unit would
+/// either print unreadably many digits or round the fast path down to
+/// nothing, so this picks whichever unit keeps the value readable.
+#[must_use]
+pub fn format_duration(duration: Duration) -> String {
+    let nanos = duration.as_nanos();
+    if nanos < 1_000 {
+        format!("{nanos}ns")
+    } else if nanos < 1_000_000 {
+        format!("{:.2}\u{b5}s", duration.as_secs_f64() * 1_000_000.0)
+    } else {
+        format!("{:.2}ms", duration.as_secs_f64() * 1_000.0)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -116,5 +140,25 @@ mod tests {
     #[test]
     fn format_price_handles_negative_values() {
         assert_eq!(format_price(Price::from_ticks(-525)), "-5.25");
+    }
+
+    #[test]
+    fn format_duration_uses_nanoseconds_below_one_microsecond() {
+        assert_eq!(format_duration(Duration::from_nanos(500)), "500ns");
+    }
+
+    #[test]
+    fn format_duration_uses_microseconds_below_one_millisecond() {
+        assert_eq!(format_duration(Duration::from_nanos(1_500)), "1.50\u{b5}s");
+    }
+
+    #[test]
+    fn format_duration_uses_milliseconds_at_and_above_one_millisecond() {
+        assert_eq!(format_duration(Duration::from_micros(2_500)), "2.50ms");
+    }
+
+    #[test]
+    fn format_duration_handles_zero() {
+        assert_eq!(format_duration(Duration::ZERO), "0ns");
     }
 }
