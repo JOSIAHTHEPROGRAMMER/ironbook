@@ -10,11 +10,11 @@
 
 pub mod errors;
 pub mod matching;
+pub mod metrics;
 pub mod orderbook;
 pub mod orders;
 pub mod trade;
 pub mod types;
-
 /// Returns the crate version as declared in Cargo.toml.
 ///
 /// This exists mostly as a canary for the CI pipeline in phase one,

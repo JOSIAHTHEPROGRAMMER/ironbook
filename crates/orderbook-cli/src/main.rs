@@ -1,8 +1,6 @@
-//! Command line entry point for ironbook.
-//!
-//! Launches the interactive session, reading commands from standard
-//! input until the user exits.
+//! Entry point for the interactive ironbook session.
 
+mod benchmark;
 mod commands;
 mod formatting;
 mod repl;
