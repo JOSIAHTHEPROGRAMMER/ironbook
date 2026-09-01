@@ -6,7 +6,7 @@ use std::time::Instant;
 
 use crate::errors::{MatchingError, MatchingResult, OrderBookError};
 use crate::metrics::Metrics;
-use crate::orderbook::OrderBook;
+use crate::orderbook::{OrderBook, PriceLevelQueue};
 use crate::orders::Order;
 use crate::trade::Trade;
 use crate::types::{ClientOrderId, OrderId, Price, Quantity, Side, Symbol, TradeId};
@@ -314,10 +314,9 @@ impl MatchingEngine {
     }
 
     fn first_resting_order_id(&self, side: Side, price: Price) -> OrderId {
-        *self
-            .book
+        self.book
             .price_level(side, price)
-            .and_then(std::collections::VecDeque::front)
+            .and_then(PriceLevelQueue::front)
             .expect("best_price only returns a price that has a resting order")
     }
 
@@ -788,7 +787,6 @@ mod tests {
             .price_level(Side::Buy, Price::from_ticks(100))
             .unwrap()
             .iter()
-            .copied()
             .collect();
         assert_eq!(level, vec![OrderId::from_sequence(2), report.order_id()]);
     }

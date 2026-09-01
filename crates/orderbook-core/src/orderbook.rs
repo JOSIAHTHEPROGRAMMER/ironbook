@@ -1,24 +1,213 @@
 //! The order book, storing resting limit orders indexed by price and time.
 
-use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::errors::{OrderBookError, OrderBookResult};
 use crate::orders::{Order, OrderType};
 use crate::types::{ClientOrderId, OrderId, Price, Side};
 
+/// Index into a price level's node arena.
+///
+/// Private to this module, an implementation detail of how
+/// `PriceLevelQueue` locates nodes in O(1), not a domain concept
+/// anything outside this file needs to know about.
+type NodeIndex = usize;
+
+/// One entry in a price level's arrival order queue.
+///
+/// Forms a doubly linked list threaded through a `Vec`, `prev` and
+/// `next` are indices into that `Vec` rather than pointers, this is
+/// the standard safe Rust substitute for an intrusive linked list,
+/// giving O(1) removal from the middle of the list without `unsafe`.
+#[derive(Debug, Clone, Copy)]
+struct Node {
+    order_id: OrderId,
+    prev: Option<NodeIndex>,
+    next: Option<NodeIndex>,
+}
+
+/// A FIFO queue of order ids resting at one price level, supporting
+/// O(1) removal from anywhere in the queue given the node index
+/// `OrderBook` already tracks for each order.
+///
+/// Removing an order used to mean scanning the queue to find its
+/// position first, an O(k) cost in the number of orders at that price
+/// level, this was the project's known, previously flagged
+/// optimization target. An arena backed doubly linked list turns that
+/// scan into a direct index lookup: given the node index, splicing it
+/// out only touches its immediate neighbors, regardless of how many
+/// other orders are queued at the same price. Freed slots are tracked
+/// on a free list and reused by later insertions, so memory use stays
+/// bounded by the price level's peak concurrent size rather than
+/// growing with total churn over a long session.
+#[derive(Debug, Default)]
+pub struct PriceLevelQueue {
+    nodes: Vec<Option<Node>>,
+    free: Vec<NodeIndex>,
+    head: Option<NodeIndex>,
+    tail: Option<NodeIndex>,
+    len: usize,
+}
+
+impl PriceLevelQueue {
+    /// Appends an order id to the back of the queue and returns the
+    /// node index `OrderBook` should retain to remove it later in
+    /// O(1).
+    fn push_back(&mut self, order_id: OrderId) -> NodeIndex {
+        let index = self.free.pop().unwrap_or(self.nodes.len());
+        let node = Node {
+            order_id,
+            prev: self.tail,
+            next: None,
+        };
+
+        if index == self.nodes.len() {
+            self.nodes.push(Some(node));
+        } else {
+            self.nodes[index] = Some(node);
+        }
+
+        match self.tail {
+            Some(previous_tail) => {
+                self.nodes[previous_tail]
+                    .as_mut()
+                    .expect("a stored tail index always references a live node")
+                    .next = Some(index);
+            }
+            None => self.head = Some(index),
+        }
+
+        self.tail = Some(index);
+        self.len += 1;
+        index
+    }
+
+    /// Removes the node at `index` from the queue in O(1), splicing
+    /// its neighbors together directly rather than scanning for it.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `index` does not reference a currently live node.
+    /// This can only happen if a caller passes an index this queue
+    /// did not issue, or one it already removed, both are internal
+    /// bugs in how `OrderBook` tracks node indices, not something
+    /// `OrderBook::cancel`'s caller can trigger with ordinary input.
+    fn remove(&mut self, index: NodeIndex) {
+        let node = self.nodes[index]
+            .take()
+            .expect("index must reference a currently live node");
+
+        match node.prev {
+            Some(previous) => {
+                self.nodes[previous]
+                    .as_mut()
+                    .expect("a live node's linked neighbor is always itself live")
+                    .next = node.next;
+            }
+            None => self.head = node.next,
+        }
+
+        match node.next {
+            Some(next) => {
+                self.nodes[next]
+                    .as_mut()
+                    .expect("a live node's linked neighbor is always itself live")
+                    .prev = node.prev;
+            }
+            None => self.tail = node.prev,
+        }
+
+        self.free.push(index);
+        self.len -= 1;
+    }
+
+    /// Returns the order id at the front of the queue, without
+    /// removing it.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the queue's tracked head index does not reference a
+    /// currently live node, an internal bug in this type's own
+    /// bookkeeping, not something a caller can trigger.
+    #[must_use]
+    pub fn front(&self) -> Option<OrderId> {
+        let index = self.head?;
+        Some(
+            self.nodes[index]
+                .expect("a stored head index always references a live node")
+                .order_id,
+        )
+    }
+
+    /// Returns true if no orders remain in the queue.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// Returns the number of orders currently in the queue.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Returns an iterator over order ids in arrival order, front to
+    /// back.
+    #[must_use]
+    pub fn iter(&self) -> PriceLevelIter<'_> {
+        PriceLevelIter {
+            queue: self,
+            current: self.head,
+        }
+    }
+}
+
+/// Iterator over a price level's order ids in arrival order.
+///
+/// Returned by [`PriceLevelQueue::iter`].
+#[derive(Debug)]
+pub struct PriceLevelIter<'a> {
+    queue: &'a PriceLevelQueue,
+    current: Option<NodeIndex>,
+}
+
+impl Iterator for PriceLevelIter<'_> {
+    type Item = OrderId;
+
+    fn next(&mut self) -> Option<OrderId> {
+        let index = self.current?;
+        let node = self.queue.nodes[index].expect("iterator only ever visits currently live nodes");
+        self.current = node.next;
+        Some(node.order_id)
+    }
+}
+
+impl<'a> IntoIterator for &'a PriceLevelQueue {
+    type Item = OrderId;
+    type IntoIter = PriceLevelIter<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
 /// Resting limit orders for a single symbol, organized by price and
 /// time priority.
 ///
 /// Order data lives once in `orders`, price levels only store the
-/// `OrderId`s resting at that price, in arrival order. This keeps
-/// cancellation and lookups from needing to duplicate or synchronize
-/// order data across two places.
+/// `OrderId`s resting at that price, in arrival order, via
+/// `PriceLevelQueue`. `node_index` tracks where each resting order's
+/// id lives within its price level's queue, so `cancel` can splice it
+/// out in O(1) instead of scanning the level to find it first. This
+/// keeps cancellation and lookups from needing to duplicate or
+/// synchronize order data across two places.
 #[derive(Debug, Default)]
 pub struct OrderBook {
     orders: HashMap<OrderId, Order>,
-    bids: BTreeMap<Price, VecDeque<OrderId>>,
-    asks: BTreeMap<Price, VecDeque<OrderId>>,
+    bids: BTreeMap<Price, PriceLevelQueue>,
+    asks: BTreeMap<Price, PriceLevelQueue>,
     client_order_ids: HashSet<ClientOrderId>,
+    node_index: HashMap<OrderId, NodeIndex>,
 }
 
 impl OrderBook {
@@ -60,16 +249,23 @@ impl OrderBook {
         let side = order.side();
 
         self.client_order_ids.insert(order.client_order_id());
-        self.orders.insert(id, order);
-        self.book_for_mut(side)
+        let node_index = self
+            .book_for_mut(side)
             .entry(price)
             .or_default()
             .push_back(id);
+        self.node_index.insert(id, node_index);
+        self.orders.insert(id, order);
 
         Ok(())
     }
 
     /// Removes a resting order from the book and returns it.
+    ///
+    /// Removal from its price level is O(1): `node_index` already
+    /// tracks exactly where the order's id lives in that level's
+    /// queue, so this splices it out directly rather than scanning the
+    /// level to find it first.
     ///
     /// # Errors
     ///
@@ -78,11 +274,11 @@ impl OrderBook {
     ///
     /// # Panics
     ///
-    /// Panics if an order stored in `orders` is missing its price, or
-    /// if its price level or its own id within that level cannot be
-    /// found. All three would mean `insert` and `cancel` have fallen
-    /// out of sync with each other, an internal bug, not ordinary
-    /// input the caller could trigger.
+    /// Panics if an order stored in `orders` is missing its price, its
+    /// node index, or its price level cannot be found. All three would
+    /// mean `insert` and `cancel` have fallen out of sync with each
+    /// other, an internal bug, not ordinary input the caller could
+    /// trigger.
     pub fn cancel(&mut self, order_id: OrderId) -> OrderBookResult<Order> {
         let order = self
             .orders
@@ -92,17 +288,17 @@ impl OrderBook {
         let price = order
             .price()
             .expect("orders stored on the book always have a price");
-        let queue = self
+        let node_index = self
+            .node_index
+            .remove(&order_id)
+            .expect("a stored order's node index must exist");
+        let level = self
             .book_for_mut(order.side())
             .get_mut(&price)
             .expect("a stored order's price level must exist");
-        let position = queue
-            .iter()
-            .position(|id| *id == order_id)
-            .expect("a stored order's id must be present in its price level");
-        queue.remove(position);
+        level.remove(node_index);
 
-        if queue.is_empty() {
+        if level.is_empty() {
             self.book_for_mut(order.side()).remove(&price);
         }
         self.client_order_ids.remove(&order.client_order_id());
@@ -149,7 +345,7 @@ impl OrderBook {
     /// Returns the order ids resting at a specific price level, in
     /// arrival order.
     #[must_use]
-    pub fn price_level(&self, side: Side, price: Price) -> Option<&VecDeque<OrderId>> {
+    pub fn price_level(&self, side: Side, price: Price) -> Option<&PriceLevelQueue> {
         self.book_for(side).get(&price)
     }
 
@@ -172,10 +368,10 @@ impl OrderBook {
     pub fn price_levels(
         &self,
         side: Side,
-    ) -> impl DoubleEndedIterator<Item = (Price, &VecDeque<OrderId>)> {
+    ) -> impl DoubleEndedIterator<Item = (Price, &PriceLevelQueue)> {
         self.book_for(side)
             .iter()
-            .map(|(&price, orders)| (price, orders))
+            .map(|(&price, level)| (price, level))
     }
 
     /// Returns true if no orders are resting on the book.
@@ -190,14 +386,14 @@ impl OrderBook {
         self.orders.len()
     }
 
-    fn book_for(&self, side: Side) -> &BTreeMap<Price, VecDeque<OrderId>> {
+    fn book_for(&self, side: Side) -> &BTreeMap<Price, PriceLevelQueue> {
         match side {
             Side::Buy => &self.bids,
             Side::Sell => &self.asks,
         }
     }
 
-    fn book_for_mut(&mut self, side: Side) -> &mut BTreeMap<Price, VecDeque<OrderId>> {
+    fn book_for_mut(&mut self, side: Side) -> &mut BTreeMap<Price, PriceLevelQueue> {
         match side {
             Side::Buy => &mut self.bids,
             Side::Sell => &mut self.asks,
@@ -318,7 +514,6 @@ mod tests {
             .price_level(Side::Buy, Price::from_ticks(100))
             .unwrap()
             .iter()
-            .copied()
             .collect();
 
         assert_eq!(
@@ -414,5 +609,66 @@ mod tests {
 
         book.cancel(OrderId::from_sequence(1)).unwrap();
         assert!(!book.contains_client_order_id(client_id));
+    }
+
+    #[test]
+    fn cancelling_from_the_middle_of_a_deep_price_level_preserves_order_of_the_rest() {
+        let mut book = OrderBook::new();
+        for sequence in 1..=5u64 {
+            book.insert(limit_order(sequence, sequence, Side::Buy, 100))
+                .unwrap();
+        }
+
+        book.cancel(OrderId::from_sequence(3)).unwrap();
+
+        let remaining: Vec<OrderId> = book
+            .price_level(Side::Buy, Price::from_ticks(100))
+            .unwrap()
+            .iter()
+            .collect();
+        assert_eq!(
+            remaining,
+            vec![
+                OrderId::from_sequence(1),
+                OrderId::from_sequence(2),
+                OrderId::from_sequence(4),
+                OrderId::from_sequence(5),
+            ]
+        );
+    }
+
+    #[test]
+    fn cancelling_every_order_in_reverse_leaves_an_empty_level() {
+        let mut book = OrderBook::new();
+        for sequence in 1..=20u64 {
+            book.insert(limit_order(sequence, sequence, Side::Buy, 100))
+                .unwrap();
+        }
+
+        for sequence in (1..=20u64).rev() {
+            book.cancel(OrderId::from_sequence(sequence)).unwrap();
+        }
+
+        assert!(book.is_empty());
+        assert_eq!(book.best_price(Side::Buy), None);
+    }
+
+    #[test]
+    fn a_node_slot_freed_by_cancel_is_reused_by_a_later_insert() {
+        let mut book = OrderBook::new();
+        book.insert(limit_order(1, 1, Side::Buy, 100)).unwrap();
+        book.insert(limit_order(2, 2, Side::Buy, 100)).unwrap();
+        book.cancel(OrderId::from_sequence(1)).unwrap();
+        book.insert(limit_order(3, 3, Side::Buy, 100)).unwrap();
+
+        let remaining: Vec<OrderId> = book
+            .price_level(Side::Buy, Price::from_ticks(100))
+            .unwrap()
+            .iter()
+            .collect();
+        assert_eq!(
+            remaining,
+            vec![OrderId::from_sequence(2), OrderId::from_sequence(3)]
+        );
     }
 }
