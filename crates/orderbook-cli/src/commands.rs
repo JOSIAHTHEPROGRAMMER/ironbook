@@ -1,13 +1,11 @@
 //! Defines every interactive command and how it maps to matching
 //! engine calls.
 
-use std::collections::VecDeque;
-
 use clap::{Args, Subcommand};
 use orderbook_core::errors::OrderBookError;
 use orderbook_core::matching::ExecutionReport;
 use orderbook_core::metrics::{LatencyHistogram, Metrics};
-use orderbook_core::orderbook::OrderBook;
+use orderbook_core::orderbook::{OrderBook, PriceLevelQueue};
 use orderbook_core::orders::Order;
 use orderbook_core::trade::Trade;
 use orderbook_core::types::{ClientOrderId, OrderId, Price, Quantity, Side, Symbol};
@@ -405,10 +403,10 @@ fn format_trade(trade: &Trade) -> String {
     )
 }
 
-fn format_price_level(price: Price, order_ids: &VecDeque<OrderId>, book: &OrderBook) -> String {
+fn format_price_level(price: Price, order_ids: &PriceLevelQueue, book: &OrderBook) -> String {
     let total: u64 = order_ids
         .iter()
-        .filter_map(|id| book.get(*id))
+        .filter_map(|id| book.get(id))
         .map(|order| order.remaining_quantity().units())
         .sum();
     format!("  {} x {}", format_price(price), total)
