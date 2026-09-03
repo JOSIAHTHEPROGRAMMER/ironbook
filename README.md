@@ -4,7 +4,7 @@
 [![Coverage](https://codecov.io/gh/JOSIAHTHEPROGRAMMER/ironbook/branch/main/graph/badge.svg)](https://codecov.io/gh/JOSIAHTHEPROGRAMMER/ironbook)
 [![Rust](https://img.shields.io/badge/rust-1.97.1-orange.svg)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
-[![docs](https://img.shields.io/badge/docs-rustdoc-blue.svg)](https://github.com/JOSIAHTHEPROGRAMMER/ironbook)
+[![docs](https://img.shields.io/badge/docs-rustdoc-blue.svg)](https://JOSIAHTHEPROGRAMMER.github.io/ironbook/)
 
 A limit order book and matching engine, built in Rust, modeled on the core of a modern electronic exchange.
 
@@ -49,19 +49,12 @@ Inside the interactive session:
 
 `help` lists every available command. See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the full local development workflow, and [docs/BENCHMARKING.md](docs/BENCHMARKING.md) for how to run and interpret the Criterion benchmarks.
 
-## Roadmap
+## Documentation
 
-| Phase | Scope                                                   | Status      |
-| ----- | ------------------------------------------------------- | ----------- |
-| 1     | Repository setup, CI, license, contributing guidelines  | Complete    |
-| 2     | Domain models: types, errors, orders, trades            | Complete    |
-| 3     | Order book: price and time priority storage             | Complete    |
-| 4     | Matching engine: price time priority matching           | Complete    |
-| 5     | Order management: cancel and modify                     | Complete    |
-| 6     | Interactive CLI                                         | Complete    |
-| 7     | Metrics collection, Criterion benchmarks, CLI reporting | Complete    |
-| 8     | Optimization: O(1) order cancellation                   | Complete    |
-| 9     | Documentation and interview preparation guide           | In progress |
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — design decisions and why each one was made
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — local setup, verification workflow, git process, known gotchas
+- [docs/BENCHMARKING.md](docs/BENCHMARKING.md) — running the Criterion suite and interpreting results
+- [Published API docs](https://JOSIAHTHEPROGRAMMER.github.io/ironbook/) — generated rustdoc for both crates
 
 ## Contributing
 

@@ -28,7 +28,7 @@ struct Node {
 
 /// A FIFO queue of order ids resting at one price level, supporting
 /// O(1) removal from anywhere in the queue given the node index
-/// `OrderBook` already tracks for each order.
+/// [`OrderBook`] already tracks for each order.
 ///
 /// Removing an order used to mean scanning the queue to find its
 /// position first, an O(k) cost in the number of orders at that price
@@ -195,12 +195,13 @@ impl<'a> IntoIterator for &'a PriceLevelQueue {
 /// time priority.
 ///
 /// Order data lives once in `orders`, price levels only store the
-/// `OrderId`s resting at that price, in arrival order, via
-/// `PriceLevelQueue`. `node_index` tracks where each resting order's
-/// id lives within its price level's queue, so `cancel` can splice it
-/// out in O(1) instead of scanning the level to find it first. This
-/// keeps cancellation and lookups from needing to duplicate or
-/// synchronize order data across two places.
+/// [`OrderId`]s resting at that price, in arrival order, via
+/// [`PriceLevelQueue`]. `node_index` tracks where each resting
+/// order's id lives within its price level's queue, so
+/// [`OrderBook::cancel`] can splice it out in O(1) instead of
+/// scanning the level to find it first. This keeps cancellation and
+/// lookups from needing to duplicate or synchronize order data across
+/// two places.
 #[derive(Debug, Default)]
 pub struct OrderBook {
     orders: HashMap<OrderId, Order>,
@@ -221,17 +222,17 @@ impl OrderBook {
     ///
     /// # Errors
     ///
-    /// Returns `OrderBookError::MarketOrderCannotRest` if `order` is a
-    /// market order, or `OrderBookError::DuplicateClientOrderId` if its
-    /// client order id already has a resting order.
+    /// Returns [`OrderBookError::MarketOrderCannotRest`] if `order` is
+    /// a market order, or [`OrderBookError::DuplicateClientOrderId`]
+    /// if its client order id already has a resting order.
     ///
     /// # Panics
     ///
     /// Panics if `order` has no price after the market order check
-    /// above has passed. This can only happen if `Order` is changed to
-    /// allow a limit order without a price, which would itself be a bug
-    /// in `orders.rs`, not something this function can receive as
-    /// ordinary input.
+    /// above has passed. This can only happen if [`Order`] is changed
+    /// to allow a limit order without a price, which would itself be
+    /// a bug in [`crate::orders`], not something this function can
+    /// receive as ordinary input.
     pub fn insert(&mut self, order: Order) -> OrderBookResult<()> {
         if order.order_type() == OrderType::Market {
             return Err(OrderBookError::MarketOrderCannotRest);
@@ -269,16 +270,16 @@ impl OrderBook {
     ///
     /// # Errors
     ///
-    /// Returns `OrderBookError::UnknownOrder` if no resting order has
-    /// this id.
+    /// Returns [`OrderBookError::UnknownOrder`] if no resting order
+    /// has this id.
     ///
     /// # Panics
     ///
     /// Panics if an order stored in `orders` is missing its price, its
     /// node index, or its price level cannot be found. All three would
-    /// mean `insert` and `cancel` have fallen out of sync with each
-    /// other, an internal bug, not ordinary input the caller could
-    /// trigger.
+    /// mean [`OrderBook::insert`] and [`OrderBook::cancel`] have
+    /// fallen out of sync with each other, an internal bug, not
+    /// ordinary input the caller could trigger.
     pub fn cancel(&mut self, order_id: OrderId) -> OrderBookResult<Order> {
         let order = self
             .orders
@@ -314,19 +315,19 @@ impl OrderBook {
 
     /// Returns a mutable reference to a resting order by id.
     ///
-    /// Used by the matching engine to apply a fill directly to a maker
-    /// order still resting on the book, without removing and
-    /// reinserting it.
+    /// Used by [`crate::matching::MatchingEngine`] to apply a fill
+    /// directly to a maker order still resting on the book, without
+    /// removing and reinserting it.
     pub fn get_mut(&mut self, order_id: OrderId) -> Option<&mut Order> {
         self.orders.get_mut(&order_id)
     }
 
     /// Returns true if a resting order already uses this client order id.
     ///
-    /// Exposed so the matching engine can reject a duplicate before
-    /// matching starts, checking only at insertion time would be too
-    /// late, by then trades may have already executed against other
-    /// orders and cannot be undone.
+    /// Exposed so [`crate::matching::MatchingEngine`] can reject a
+    /// duplicate before matching starts, checking only at insertion
+    /// time would be too late, by then trades may have already
+    /// executed against other orders and cannot be undone.
     #[must_use]
     pub fn contains_client_order_id(&self, client_order_id: ClientOrderId) -> bool {
         self.client_order_ids.contains(&client_order_id)
@@ -353,7 +354,8 @@ impl OrderBook {
     ///
     /// For listing all resting orders regardless of price or side.
     /// Callers that care about price time priority should use
-    /// `price_level` instead, this makes no ordering guarantee.
+    /// [`OrderBook::price_level`] instead, this makes no ordering
+    /// guarantee.
     pub fn orders(&self) -> impl Iterator<Item = &Order> {
         self.orders.values()
     }

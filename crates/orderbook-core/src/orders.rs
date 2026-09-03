@@ -1,4 +1,4 @@
-//! The `Order` domain type and its validating constructors.
+//! The [`Order`] domain type and its validating constructors.
 
 use std::time::SystemTime;
 
@@ -20,11 +20,11 @@ pub enum OrderType {
 /// A buy or sell order, either resting on the book or in the process of
 /// being matched.
 ///
-/// Constructed only through `new_limit` or `new_market`, both validate
-/// their inputs and return `OrderError` on invalid data, so a live
-/// `Order` can never be in an invalid state, there is no path that
-/// produces a limit order with a bad price or any order with zero
-/// quantity.
+/// Constructed only through [`Order::new_limit`] or
+/// [`Order::new_market`], both validate their inputs and return
+/// [`OrderError`] on invalid data, so a live `Order` can never be in
+/// an invalid state, there is no path that produces a limit order
+/// with a bad price or any order with zero quantity.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Order {
     id: OrderId,
@@ -41,11 +41,12 @@ pub struct Order {
 impl Order {
     /// Checks that a price and quantity are valid for a limit order.
     ///
-    /// Pulled out of `new_limit` so the matching engine's `modify_order`
-    /// can run the same check before touching the book, a rejected
-    /// modify must never cancel the existing order first and discover
-    /// the replacement is invalid only afterward, by then there would
-    /// be nothing left to roll back to.
+    /// Pulled out of [`Order::new_limit`] so
+    /// [`crate::matching::MatchingEngine::modify_order`] can run the
+    /// same check before touching the book, a rejected modify must
+    /// never cancel the existing order first and discover the
+    /// replacement is invalid only afterward, by then there would be
+    /// nothing left to roll back to.
     pub(crate) fn validate_limit_inputs(price: Price, quantity: Quantity) -> OrderResult<()> {
         if !quantity.is_positive() {
             return Err(OrderError::ZeroQuantity);
@@ -60,8 +61,9 @@ impl Order {
     ///
     /// # Errors
     ///
-    /// Returns `OrderError::ZeroQuantity` if `quantity` is zero, or
-    /// `OrderError::NonPositiveLimitPrice` if `price` is zero or negative.
+    /// Returns [`OrderError::ZeroQuantity`] if `quantity` is zero, or
+    /// [`OrderError::NonPositiveLimitPrice`] if `price` is zero or
+    /// negative.
     pub fn new_limit(
         id: OrderId,
         client_order_id: ClientOrderId,
@@ -89,7 +91,7 @@ impl Order {
     ///
     /// # Errors
     ///
-    /// Returns `OrderError::ZeroQuantity` if `quantity` is zero.
+    /// Returns [`OrderError::ZeroQuantity`] if `quantity` is zero.
     pub fn new_market(
         id: OrderId,
         client_order_id: ClientOrderId,
@@ -164,7 +166,7 @@ impl Order {
 
     /// Returns when the order was submitted, for display and audit only.
     ///
-    /// Not used for time priority, `OrderId` ordering serves that role.
+    /// Not used for time priority, [`OrderId`] ordering serves that role.
     #[must_use]
     pub const fn submitted_at(&self) -> SystemTime {
         self.submitted_at
@@ -179,11 +181,11 @@ impl Order {
     /// Reduces the remaining quantity by `fill_quantity`.
     ///
     /// Returns false if `fill_quantity` exceeds what remains. That case
-    /// should never occur if the matching engine is correct, an
-    /// overfill is an internal consistency bug, not user input to
-    /// validate, so it is reported as a boolean rather than an
-    /// `OrderError` and left to the caller to treat as seriously as it
-    /// deserves.
+    /// should never occur if [`crate::matching::MatchingEngine`] is
+    /// correct, an overfill is an internal consistency bug, not user
+    /// input to validate, so it is reported as a boolean rather than an
+    /// [`OrderError`] and left to the caller to treat as seriously as
+    /// it deserves.
     pub fn fill(&mut self, fill_quantity: Quantity) -> bool {
         match self.remaining_quantity.checked_sub(fill_quantity) {
             Some(new_remaining) => {

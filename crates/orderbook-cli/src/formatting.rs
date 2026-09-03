@@ -1,8 +1,9 @@
 //! Converts between human typed decimal prices and the integer tick
-//! representation `orderbook-core` uses internally, and formats other
-//! values that need a display specific presentation, like latency.
+//! representation [`orderbook_core`] uses internally, and formats
+//! other values that need a display specific presentation, like
+//! latency.
 //!
-//! This intentionally lives in the CLI crate, not `orderbook-core`.
+//! This intentionally lives in the CLI crate, not [`orderbook_core`].
 //! The core library has no opinion on tick size, decimal display, or
 //! how a duration should be printed, those are presentation concerns,
 //! this module is where they belong.
@@ -20,7 +21,7 @@ const TICKS_PER_UNIT: i64 = 100;
 /// Works on the string's digits directly rather than parsing as a
 /// float and multiplying, floating point cannot reliably represent
 /// every two decimal value, doing the conversion with floats would
-/// undermine the entire reason `Price` is an integer in the first
+/// undermine the entire reason [`Price`] is an integer in the first
 /// place.
 ///
 /// # Errors

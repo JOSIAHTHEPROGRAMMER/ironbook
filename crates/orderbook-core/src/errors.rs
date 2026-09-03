@@ -34,7 +34,8 @@ pub enum OrderError {
 }
 
 impl OrderError {
-    /// Builds a `NonPositiveLimitPrice` error from a rejected price.
+    /// Builds a [`OrderError::NonPositiveLimitPrice`] error from a
+    /// rejected price.
     #[must_use]
     pub const fn non_positive_limit_price(price: Price) -> Self {
         Self::NonPositiveLimitPrice {
@@ -48,7 +49,7 @@ pub type OrderResult<T> = Result<T, OrderError>;
 
 /// Reasons an operation on the order book fails.
 ///
-/// Marked non exhaustive for the same reason as `OrderError`, future
+/// Marked non exhaustive for the same reason as [`OrderError`], future
 /// order types will likely add rejection cases specific to resting
 /// orders, an iceberg order revealing its next slice, for example.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -67,8 +68,8 @@ pub enum OrderBookError {
     ///
     /// Market orders match immediately against the book and never rest
     /// on it, inserting one here would leave it stuck as a phantom
-    /// limit order with no price, which the matching engine could never
-    /// clean up correctly.
+    /// limit order with no price, which [`crate::matching::MatchingEngine`]
+    /// could never clean up correctly.
     #[error("market orders cannot be inserted into the book")]
     MarketOrderCannotRest,
 }
@@ -78,11 +79,13 @@ pub type OrderBookResult<T> = Result<T, OrderBookError>;
 
 /// Reasons the matching engine rejects an incoming order.
 ///
-/// Wraps `OrderError` and `OrderBookError` rather than redeclaring
-/// their variants, an order can be rejected either because the order
-/// itself is invalid or because its client order id collides with a
-/// resting order, both are already fully described by the layers below,
-/// this type just lets the engine return one error type to its caller.
+/// Wraps [`OrderError`] and [`OrderBookError`] rather than
+/// redeclaring their variants, an order can be rejected either
+/// because the order itself is invalid or because its client order id
+/// collides with a resting order, both are already fully described by
+/// the layers below, this type just lets
+/// [`crate::matching::MatchingEngine`] return one error type to its
+/// caller.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 #[non_exhaustive]
 pub enum MatchingError {
