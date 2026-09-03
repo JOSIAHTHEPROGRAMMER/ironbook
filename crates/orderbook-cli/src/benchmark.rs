@@ -2,7 +2,7 @@
 //! session engine, for a quick throughput and latency demonstration
 //! without leaving the interactive session.
 //!
-//! This is distinct from the Criterion benchmarks in `orderbook-core`.
+//! This is distinct from the Criterion benchmarks in [`orderbook_core`].
 //! Those run in a controlled, statistically sampled harness purely for
 //! measurement. This runs once, against whatever symbol the caller
 //! names, and its activity becomes part of that symbol's real session

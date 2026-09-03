@@ -35,8 +35,8 @@ impl Price {
     /// Returns true if the price is a valid limit price, strictly positive.
     ///
     /// Zero and negative prices are rejected at order construction time,
-    /// this helper exists so that validation logic in `orders.rs` reads
-    /// as a plain boolean check instead of an inline comparison.
+    /// this helper exists so that validation logic in [`crate::orders`]
+    /// reads as a plain boolean check instead of an inline comparison.
     #[must_use]
     pub const fn is_valid_limit_price(self) -> bool {
         self.0 > 0
@@ -116,9 +116,10 @@ impl OrderId {
 /// The engine assigned identifier for a trade.
 ///
 /// Assigned from its own monotonically increasing counter, separate
-/// from the one that produces `OrderId`. A trade is not an order, using
-/// the same counter for both would tie their numbering together for no
-/// reason and make either sequence harder to reason about on its own.
+/// from the one that produces [`OrderId`]. A trade is not an order,
+/// using the same counter for both would tie their numbering together
+/// for no reason and make either sequence harder to reason about on
+/// its own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct TradeId(u64);
 
@@ -139,12 +140,13 @@ impl TradeId {
 /// A caller supplied identifier used for duplicate detection and
 /// client side order tracking.
 ///
-/// This is separate from `OrderId` on purpose. `OrderId` is assigned by
-/// the engine and used internally for time priority, `ClientOrderId` is
-/// supplied by whoever submits the order and is what duplicate
-/// submission checks compare against. Represented as `u64` for now
-/// rather than a string, matching the CLI's expected input format,
-/// revisit if a future interface needs opaque string client IDs.
+/// This is separate from [`OrderId`] on purpose. [`OrderId`] is
+/// assigned by the engine and used internally for time priority,
+/// `ClientOrderId` is supplied by whoever submits the order and is
+/// what duplicate submission checks compare against. Represented as
+/// `u64` for now rather than a string, matching the CLI's expected
+/// input format, revisit if a future interface needs opaque string
+/// client IDs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct ClientOrderId(u64);
 
@@ -196,9 +198,10 @@ pub enum Side {
 impl Side {
     /// Returns the opposite side.
     ///
-    /// Used by the matching engine to find the resting orders a new
-    /// order should match against, a buy order matches against the ask
-    /// book, so the incoming side's opposite gives the book to search.
+    /// Used by [`crate::matching::MatchingEngine`] to find the resting
+    /// orders a new order should match against, a buy order matches
+    /// against the ask book, so the incoming side's opposite gives the
+    /// book to search.
     #[must_use]
     pub const fn opposite(self) -> Self {
         match self {

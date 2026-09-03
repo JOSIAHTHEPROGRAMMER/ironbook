@@ -1,4 +1,4 @@
-//! The `Trade` domain type produced when the matching engine fills orders.
+//! The [`Trade`] domain type produced when the matching engine fills orders.
 
 use std::time::SystemTime;
 
@@ -8,9 +8,10 @@ use crate::types::{OrderId, Price, Quantity, Side, Symbol, TradeId};
 
 /// A completed match between two orders.
 ///
-/// Built only by the matching engine from values already validated when
-/// the underlying orders were constructed, so `Trade::new` takes no
-/// fallible path, there is nothing left to check.
+/// Built only by [`crate::matching::MatchingEngine`] from values
+/// already validated when the underlying orders were constructed, so
+/// `Trade::new` takes no fallible path, there is nothing left to
+/// check.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Trade {
     id: TradeId,

@@ -1,4 +1,4 @@
-//! Holds one matching engine per symbol for an interactive CLI session.
+//! Holds one [`MatchingEngine`] per symbol for an interactive CLI session.
 
 use std::collections::HashMap;
 
@@ -7,10 +7,10 @@ use orderbook_core::types::Symbol;
 
 /// A CLI session's state: one independent matching engine per symbol.
 ///
-/// `orderbook-core`'s `MatchingEngine` is deliberately single symbol,
-/// this type is what turns that into a multi symbol session at the CLI
-/// layer, without `orderbook-core` needing to know symbols exist as a
-/// concept beyond a label on an order.
+/// `orderbook-core`'s [`MatchingEngine`] is deliberately single
+/// symbol, this type is what turns that into a multi symbol session
+/// at the CLI layer, without `orderbook-core` needing to know symbols
+/// exist as a concept beyond a label on an order.
 #[derive(Debug, Default)]
 pub struct Session {
     engines: HashMap<Symbol, MatchingEngine>,
@@ -45,9 +45,9 @@ impl Session {
     /// without creating one.
     ///
     /// Used by cancel and modify, an order can only exist if its symbol
-    /// already has an engine, using `engine_mut` here would leave an
-    /// orphan empty engine behind every time someone tried to cancel an
-    /// order on a symbol that was never traded.
+    /// already has an engine, using [`Session::engine_mut`] here would
+    /// leave an orphan empty engine behind every time someone tried to
+    /// cancel an order on a symbol that was never traded.
     pub fn engine_mut_if_exists(&mut self, symbol: &Symbol) -> Option<&mut MatchingEngine> {
         self.engines.get_mut(symbol)
     }

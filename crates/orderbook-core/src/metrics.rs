@@ -1,9 +1,10 @@
 //! Activity counters and latency tracking for the matching engine.
 //!
-//! `Metrics` is owned by `MatchingEngine`, mirroring how `OrderBook` is
-//! a distinct type the engine owns rather than a set of fields folded
-//! directly into it. Nothing here depends on order book or matching
-//! types, `Metrics` only records what it is told happened, the engine
+//! [`Metrics`] is owned by [`crate::matching::MatchingEngine`],
+//! mirroring how [`crate::orderbook::OrderBook`] is a distinct type
+//! the engine owns rather than a set of fields folded directly into
+//! it. Nothing here depends on order book or matching types,
+//! `Metrics` only records what it is told happened, the engine
 //! decides when to call into it.
 
 use std::time::Duration;
@@ -45,7 +46,7 @@ const BUCKET_BOUNDS_NANOS: &[u64] = &[
 /// requirement for a matching engine that may run continuously across
 /// a full trading session. The tradeoff is that percentiles are bucket
 /// boundary approximations, not exact values, this is documented on
-/// `percentile` rather than left implicit.
+/// [`LatencyHistogram::percentile`] rather than left implicit.
 #[derive(Debug, Clone)]
 pub struct LatencyHistogram {
     bucket_counts: Vec<u64>,
@@ -159,7 +160,8 @@ impl LatencyHistogram {
         Some(Duration::from_nanos(self.max_nanos))
     }
 
-    /// Returns the approximate median latency, equivalent to `percentile(0.5)`.
+    /// Returns the approximate median latency, equivalent to
+    /// [`LatencyHistogram::percentile`]`(0.5)`.
     #[must_use]
     pub fn median(&self) -> Option<Duration> {
         self.percentile(0.5)
@@ -174,9 +176,9 @@ impl Default for LatencyHistogram {
 
 /// Activity counters and latency histograms for one matching engine.
 ///
-/// Reports only what it is told, `MatchingEngine` calls the `record_*`
-/// methods at the appropriate points, `Metrics` has no knowledge of
-/// orders, trades, or the book itself.
+/// Reports only what it is told, [`crate::matching::MatchingEngine`]
+/// calls the `record_*` methods at the appropriate points, `Metrics`
+/// has no knowledge of orders, trades, or the book itself.
 #[derive(Debug, Clone, Default)]
 pub struct Metrics {
     orders_submitted: u64,
@@ -219,8 +221,9 @@ impl Metrics {
         self.trades_executed += count as u64;
     }
 
-    /// Records the end to end latency of one `submit_limit_order` or
-    /// `submit_market_order` call.
+    /// Records the end to end latency of one
+    /// [`crate::matching::MatchingEngine::submit_limit_order`] or
+    /// [`crate::matching::MatchingEngine::submit_market_order`] call.
     pub fn record_submit_latency(&mut self, elapsed: Duration) {
         self.submit_latency.record(elapsed);
     }
