@@ -6,8 +6,8 @@ This document explains the design decisions behind ironbook: what each piece doe
 
 The project is a Cargo workspace with two crates, split from the start rather than merged later:
 
-- **`orderbook-core`** — the order book, matching engine, metrics, and domain types. No I/O, no CLI dependency, no knowledge that a terminal exists.
-- **`orderbook-cli`** — a thin client over `orderbook-core`: command parsing, decimal price display, multi symbol session management.
+- **`orderbook-core`** - the order book, matching engine, metrics, and domain types. No I/O, no CLI dependency, no knowledge that a terminal exists.
+- **`orderbook-cli`** - a thin client over `orderbook-core`: command parsing, decimal price display, multi symbol session management.
 
 The split exists because `orderbook-core` is the part worth reusing. A REST API, a WebSocket market data feed, or a persistence layer would all sit on top of the same engine without needing to touch matching logic, and none of them would want the CLI's command parsing or decimal formatting along for the ride. Keeping the boundary in place from Phase 1 also kept the matching logic testable in isolation the whole way through, `orderbook-core`'s test suite never needed a terminal, a session, or a parsed command to exercise the engine.
 
@@ -77,10 +77,10 @@ The CLI surfaces this as two separate commands rather than one: `stats` shows th
 
 Five workload shapes, each isolating one property of the engine rather than mixing concerns, at order counts of 100, 1,000, 10,000, and 100,000:
 
-- **random** — realistic mixed limit and market order flow, a general throughput baseline.
-- **worst_case** — builds a resting order at each of N distinct price levels holding one unit, then times a single market order sweeping the entire book. Setup stays outside Criterion's timed closure, isolating the matching loop's actual worst case single call cost, not the cost of building the book.
-- **heavy_market** — seeds resting liquidity, then times a stream of market orders against it.
-- **heavy_cancel** — rests N orders all at the same price level, the worst case shape for the order book's per level scan, then times cancelling all of them in shuffled order. This is the group that produced the before and after numbers for the Phase 8 optimization.
-- **large_partial_fill** — rests many small maker orders at one price, then times a handful of large takers each partially filling across several of them.
+- **random** - realistic mixed limit and market order flow, a general throughput baseline.
+- **worst_case** - builds a resting order at each of N distinct price levels holding one unit, then times a single market order sweeping the entire book. Setup stays outside Criterion's timed closure, isolating the matching loop's actual worst case single call cost, not the cost of building the book.
+- **heavy_market** - seeds resting liquidity, then times a stream of market orders against it.
+- **heavy_cancel** - rests N orders all at the same price level, the worst case shape for the order book's per level scan, then times cancelling all of them in shuffled order. This is the group that produced the before and after numbers for the Phase 8 optimization.
+- **large_partial_fill** - rests many small maker orders at one price, then times a handful of large takers each partially filling across several of them.
 
 Randomness uses `rand`'s `StdRng`, seeded deterministically rather than from a fresh source each run, so benchmark input is identical run to run and measured differences reflect changes to the engine, not to the input.

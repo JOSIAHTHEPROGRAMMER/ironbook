@@ -30,11 +30,11 @@ cargo bench -- heavy_cancel
 
 ## What each group measures
 
-- **`random_workload`** — a realistic mix of limit and market orders, roughly even buy and sell, ninety percent limit. General throughput under order flow that isn't adversarial in either direction.
-- **`worst_case_sweep`** — setup (untimed) rests one order at each of N distinct price levels, holding one unit each. The timed portion is a single market order sized to sweep the entire book. This isolates the matching loop's actual worst case: every level requires its own `best_price` lookup, no level is cleared by fewer than the minimum number of fills.
-- **`heavy_market_orders`** — setup seeds resting liquidity across ten price levels, the timed portion is a stream of small market orders against it.
-- **`heavy_cancel`** — setup rests N orders all at the same price level, the worst case shape for a price level's internal scan, the timed portion cancels every one of them in randomized order. This is the group that demonstrates the Phase 8 optimization directly, see below.
-- **`large_partial_fill`** — setup rests many one unit maker orders at a single price, the timed portion submits a handful of large takers, each sized to partially fill across many of them.
+- **`random_workload`** - a realistic mix of limit and market orders, roughly even buy and sell, ninety percent limit. General throughput under order flow that isn't adversarial in either direction.
+- **`worst_case_sweep`** - setup (untimed) rests one order at each of N distinct price levels, holding one unit each. The timed portion is a single market order sized to sweep the entire book. This isolates the matching loop's actual worst case: every level requires its own `best_price` lookup, no level is cleared by fewer than the minimum number of fills.
+- **`heavy_market_orders`** - setup seeds resting liquidity across ten price levels, the timed portion is a stream of small market orders against it.
+- **`heavy_cancel`** - setup rests N orders all at the same price level, the worst case shape for a price level's internal scan, the timed portion cancels every one of them in randomized order. This is the group that demonstrates the Phase 8 optimization directly, see below.
+- **`large_partial_fill`** - setup rests many one unit maker orders at a single price, the timed portion submits a handful of large takers, each sized to partially fill across many of them.
 
 In every group, setup work stays outside Criterion's timed closure. Only the operation the group is named for is actually measured.
 
