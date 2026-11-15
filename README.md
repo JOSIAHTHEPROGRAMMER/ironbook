@@ -18,8 +18,8 @@ Prices and quantities are represented as scaled integers rather than floating po
 
 The project is a Cargo workspace with two crates:
 
-- **orderbook-core** — the order book, matching engine, metrics collection, and domain types. No I/O, no CLI dependency. This is the crate that would get reused if a REST API or WebSocket feed were added later. Includes a Criterion benchmark suite covering five workload shapes (random flow, worst case book sweeps, heavy market orders, heavy cancellation, large partial fills) at order counts from 100 to 100,000.
-- **orderbook-cli** — the command line interface. A thin client over `orderbook-core`, handling command parsing, decimal price display, and session management across multiple symbols.
+- **orderbook-core** - the order book, matching engine, metrics collection, and domain types. No I/O, no CLI dependency. This is the crate that would get reused if a REST API or WebSocket feed were added later. Includes a Criterion benchmark suite covering five workload shapes (random flow, worst case book sweeps, heavy market orders, heavy cancellation, large partial fills) at order counts from 100 to 100,000.
+- **orderbook-cli** - the command line interface. A thin client over `orderbook-core`, handling command parsing, decimal price display, and session management across multiple symbols.
 
 Splitting these out from the start keeps the matching logic testable in isolation and keeps the door open for other frontends without touching the engine.
 
@@ -51,10 +51,10 @@ Inside the interactive session:
 
 ## Documentation
 
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — design decisions and why each one was made
-- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — local setup, verification workflow, git process, known gotchas
-- [docs/BENCHMARKING.md](docs/BENCHMARKING.md) — running the Criterion suite and interpreting results
-- [Published API docs](https://JOSIAHTHEPROGRAMMER.github.io/ironbook/) — generated rustdoc for both crates
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - design decisions and why each one was made
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) - local setup, verification workflow, git process, known gotchas
+- [docs/BENCHMARKING.md](docs/BENCHMARKING.md) - running the Criterion suite and interpreting results
+- [Published API docs](https://JOSIAHTHEPROGRAMMER.github.io/ironbook/) - generated rustdoc for both crates
 
 ## Contributing
 
